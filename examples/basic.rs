@@ -23,7 +23,7 @@ fn setup(
 ) {
     // Plane
     commands.spawn_bundle(PbrBundle {
-        mesh: meshes.add(Mesh::from(shape::Plane { size: 50.0 })),
+        mesh: meshes.add(Mesh::from(shape::Plane { size: 5000.0 })),
         material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
         ..default()
     });
@@ -33,7 +33,7 @@ fn setup(
         .spawn_bundle(PbrBundle {
             mesh: meshes.add(Mesh::from(shape::Capsule { ..default() })),
             material: materials.add(Color::rgb(0.8, 0.7, 0.6).into()),
-            transform: Transform::from_xyz(0.0, 0.5, 0.0),
+            transform: Transform::from_xyz(0.0, 1.0, 0.0),
             ..default()
         })
         .insert(ThirdPersonController::default())
@@ -64,7 +64,8 @@ fn setup(
             ..default()
         })
         .insert(ThirdPersonCamera {
-            offset: Vec3::Y * 1.5,
+            target_offset: Vec3::Y * 1.5,
+            position_offset: Vec3::Y * 0.8,
             ..default()
         });
 }

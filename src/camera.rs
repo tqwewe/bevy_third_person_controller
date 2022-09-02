@@ -4,7 +4,8 @@ use bevy::{input::mouse::MouseMotion, prelude::*};
 
 use crate::controller::ThirdPersonController;
 
-const ANGLE_EPSILON: f32 = 0.001953125;
+const ANGLE_EPSILON_LOWER: f32 = 1.4;
+const ANGLE_EPSILON_UPPER: f32 = 0.3;
 
 #[derive(Component)]
 pub struct ThirdPersonCamera {
@@ -13,7 +14,9 @@ pub struct ThirdPersonCamera {
     pub yaw: f32,
     pub sensitivity: f32,
     pub distance: f32,
-    pub offset: Vec3,
+    pub min_height: f32,
+    pub target_offset: Vec3,
+    pub position_offset: Vec3,
 }
 
 impl Default for ThirdPersonCamera {
@@ -24,13 +27,12 @@ impl Default for ThirdPersonCamera {
             yaw: 0.0,
             sensitivity: 0.001,
             distance: 8.0,
-            offset: Vec3::ZERO,
+            min_height: 0.2,
+            target_offset: Vec3::ZERO,
+            position_offset: Vec3::ZERO,
         }
     }
 }
-
-// #[derive(Component, Default)]
-// pub struct ThirdPersonCameraTarget(pub u8);
 
 pub fn camera_orbit_target_system(
     windows: Res<Windows>,
@@ -51,29 +53,29 @@ pub fn camera_orbit_target_system(
             .iter()
             .fold(Vec2::ZERO, |acc, event| acc + event.delta);
 
-        // If mouse moved
-        if mouse_delta != Vec2::ZERO {
-            for (mut camera_transform, mut camera) in &mut camera_query {
-                mouse_delta *= camera.sensitivity;
+        for (mut camera_transform, mut camera) in &mut camera_query {
+            mouse_delta *= camera.sensitivity;
 
-                camera.pitch = (camera.pitch - mouse_delta.y)
-                    .clamp(-FRAC_PI_2 + ANGLE_EPSILON, FRAC_PI_2 - ANGLE_EPSILON);
-                camera.yaw -= mouse_delta.x;
+            camera.pitch = (camera.pitch - mouse_delta.y).clamp(
+                -FRAC_PI_2 + ANGLE_EPSILON_UPPER,
+                FRAC_PI_2 - ANGLE_EPSILON_LOWER,
+            );
+            camera.yaw -= mouse_delta.x;
 
-                for target_transform in &controller_query {
-                    let mut target = target_transform.translation;
-                    target.y = 0.0;
+            for target_transform in &controller_query {
+                let mut target = target_transform.translation;
+                target.y = 0.0;
 
-                    let mut behind = Transform::from_translation(
-                        target + Vec3::Z * camera.distance + camera.offset,
-                    );
-                    behind.rotate_around(
-                        target,
-                        Quat::from_euler(EulerRot::ZYX, 0.0, camera.yaw, camera.pitch),
-                    );
+                let mut pos = Transform::from_translation(
+                    target + Vec3::Z * camera.distance + camera.target_offset,
+                );
+                pos.rotate_around(
+                    target,
+                    Quat::from_euler(EulerRot::ZYX, 0.0, camera.yaw, camera.pitch),
+                );
+                pos.translation += camera.position_offset;
 
-                    *camera_transform = behind;
-                }
+                *camera_transform = pos;
             }
         }
     }
