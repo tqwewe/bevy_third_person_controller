@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 bevy = { version = "0.8", default-features = false }
 bevy_rapier3d = "0.16"
+bevy_polyline = "0.3"
 
 [dev-dependencies]
 bevy = { version = "0.8", features = [

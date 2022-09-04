@@ -1,6 +1,7 @@
 use std::f32::consts::FRAC_PI_2;
 
 use bevy::prelude::*;
+use bevy_polyline::prelude::Polyline;
 use bevy_rapier3d::prelude::*;
 
 use crate::camera::ThirdPersonCamera;
@@ -31,9 +32,9 @@ impl Default for ThirdPersonController {
     fn default() -> Self {
         Self {
             id: 0,
-            rotation_speed: 16.0,
-            movement_speed: 35.0,
-            sprint_speed: 2.0,
+            rotation_speed: 160.0,
+            movement_speed: 20.0,
+            sprint_speed: 30.0,
             max_speed: 3500.0,
             friction: 100.0,
             velocity: Vec3::ZERO,
@@ -46,10 +47,22 @@ impl Default for ThirdPersonController {
     }
 }
 
+#[derive(Deref, DerefMut)]
+pub struct FixedUpdateTimer(Timer);
+
+impl Default for FixedUpdateTimer {
+    fn default() -> Self {
+        let timer = Timer::from_seconds(1.0 / 50.0, true);
+        Self(timer)
+    }
+}
+
 pub fn controller_system(
     time: Res<Time>,
+    mut timer: Local<FixedUpdateTimer>,
     key_input: Res<Input<KeyCode>>,
-    // physics_context: Res<RapierContext>,
+    physics_context: Res<RapierContext>,
+    mut polylines: ResMut<Assets<Polyline>>,
     mut controller_query: Query<(
         Entity,
         &mut ThirdPersonController,
@@ -58,7 +71,10 @@ pub fn controller_system(
         &Collider,
     )>,
     camera_query: Query<(&ThirdPersonCamera, &Transform), Without<ThirdPersonController>>,
+    colliders: Query<&Transform, (Without<ThirdPersonController>, With<Collider>)>,
 ) {
+    timer.tick(time.delta());
+
     for (entity, mut controller, mut transform, mut velocity, collider) in &mut controller_query {
         let camera_transform = camera_query.iter().find_map(|(camera, camera_transform)| {
             (camera.target_id == controller.id).then_some(camera_transform)
@@ -75,13 +91,10 @@ pub fn controller_system(
                         + camera_transform.rotation.to_scaled_axis().y
                         - FRAC_PI_2,
                 );
-                // transform.rotation = transform.rotation.lerp(
-                //     target_rotation,
-                //     (controller.rotation_speed * time.delta_seconds())
-                //         .max(0.0)
-                //         .min(1.0),
-                // );
-                transform.rotation = target_rotation;
+                let s = (controller.rotation_speed * time.delta_seconds())
+                    .max(0.0)
+                    .min(1.0);
+                transform.rotation = transform.rotation.lerp(target_rotation, s);
 
                 transform.forward()
             } else {
@@ -93,29 +106,55 @@ pub fn controller_system(
                 .then_some(controller.sprint_speed)
                 .unwrap_or(controller.movement_speed);
 
-            let new_velocity = move_ground(
+            let mut new_velocity = move_ground(
                 acc,
                 controller.velocity, // velocity.linvel,
                 controller.friction,
                 movement_speed,
                 controller.max_speed,
-                time.delta_seconds(),
+                timer.elapsed_secs(),
             );
 
-            // let cast = physics_context.cast_shape(
-            //     transform.translation,
-            //     transform.rotation,
-            //     new_velocity,
-            //     collider,
-            //     new_velocity.length_squared(),
-            //     QueryFilter::default()
-            //         .exclude_rigid_body(entity)
-            //         .exclude_sensors(),
-            // );
-            // dbg!(cast);
-            // if let Some((_entity, toi)) = cast {
-            //     dbbg!()
-            // }
+            if new_velocity != Vec3::ZERO {
+                let length = (new_velocity).length_squared();
+                let shape_pos = transform.translation;
+                let cast = physics_context.cast_shape(
+                    shape_pos,
+                    transform.rotation,
+                    new_velocity,
+                    collider,
+                    length,
+                    QueryFilter::default()
+                        .exclude_rigid_body(entity)
+                        .exclude_sensors(),
+                );
+
+                if let Some((_other_entity, toi)) = cast {
+                    for (_, polyline) in polylines.iter_mut() {
+                        // if let Ok(_) = colliders.get(other_entity) {
+                        // wirness1 is wall offset?
+                        polyline.vertices = vec![
+                            toi.witness1,
+                            shape_pos + new_velocity + toi.witness2,
+                            // transform.translation + new_velocity + new_velocity.normalize() * 0.5,
+                            // Vec3::ZERO, //  transform.translation + new_velocity * toi.toi,
+                        ];
+
+                        // polyline.vertices = vec![
+                        // transform.translation + Vec3::Y * 0.5,
+                        // transform.translation + Vec3::Y * 0.5 + Transform::from_translation(translation),
+                        // ];
+                        // }
+                    }
+                    // dbg!(length, toi.toi, toi.status);
+                    // new_velocity -= Vec3::ONE * (length - toi.toi);
+                    // new_velocity *= (toi.toi - 0.2).max(0.0);
+                    new_velocity *= toi.toi;
+
+                    // Get distance of pos + vel
+                    // new_velocity -= (shape_pos + new_velocity) - toi.witness1;
+                }
+            }
 
             // velocity.linvel = new_velocity;
             controller.velocity = new_velocity;

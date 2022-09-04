@@ -73,7 +73,6 @@ pub fn camera_system(
             });
             for target_transform in targets {
                 let mut target = target_transform.translation;
-                target.y = 0.0;
 
                 let mut pos = Transform::from_translation(
                     target + Vec3::Z * camera.distance + camera.target_offset,
