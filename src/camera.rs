@@ -1,4 +1,4 @@
-use std::f32::consts::FRAC_PI_2;
+use std::f32::consts::{FRAC_PI_2, TAU};
 
 use bevy::{input::mouse::MouseMotion, prelude::*};
 
@@ -7,9 +7,10 @@ use crate::controller::ThirdPersonController;
 const ANGLE_EPSILON_LOWER: f32 = 1.4;
 const ANGLE_EPSILON_UPPER: f32 = 0.3;
 
-#[derive(Component)]
+#[derive(Component, Reflect)]
+#[reflect(Component)]
 pub struct ThirdPersonCamera {
-    pub target_id: u8,
+    pub target_id: u64,
     pub pitch: f32,
     pub yaw: f32,
     pub sensitivity: f32,
@@ -34,14 +35,14 @@ impl Default for ThirdPersonCamera {
     }
 }
 
-pub fn camera_orbit_target_system(
+pub fn camera_system(
     windows: Res<Windows>,
     mut mouse_events: EventReader<MouseMotion>,
     mut camera_query: Query<
         (&mut Transform, &mut ThirdPersonCamera),
         Without<ThirdPersonController>,
     >,
-    controller_query: Query<&Transform, (With<ThirdPersonController>, Without<ThirdPersonCamera>)>,
+    controller_query: Query<(&ThirdPersonController, &Transform), Without<ThirdPersonCamera>>,
 ) {
     // If window is focused
     if windows
@@ -61,8 +62,16 @@ pub fn camera_orbit_target_system(
                 FRAC_PI_2 - ANGLE_EPSILON_LOWER,
             );
             camera.yaw -= mouse_delta.x;
+            camera.yaw %= TAU;
 
-            for target_transform in &controller_query {
+            let targets = controller_query.iter().filter_map(|(controller, target)| {
+                if controller.id == camera.target_id {
+                    Some(target)
+                } else {
+                    None
+                }
+            });
+            for target_transform in targets {
                 let mut target = target_transform.translation;
                 target.y = 0.0;
 

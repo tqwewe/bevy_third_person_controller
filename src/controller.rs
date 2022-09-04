@@ -1,13 +1,14 @@
 use std::f32::consts::FRAC_PI_2;
 
 use bevy::prelude::*;
+use bevy_rapier3d::prelude::*;
 
 use crate::camera::ThirdPersonCamera;
 
 #[derive(Component, Reflect)]
 #[reflect(Component)]
 pub struct ThirdPersonController {
-    pub id: u8,
+    pub id: u64,
     pub rotation_speed: f32,
     pub movement_speed: f32,
     pub sprint_speed: f32,
@@ -31,10 +32,10 @@ impl Default for ThirdPersonController {
         Self {
             id: 0,
             rotation_speed: 16.0,
-            movement_speed: 1.0,
+            movement_speed: 35.0,
             sprint_speed: 2.0,
             max_speed: 3500.0,
-            friction: 5.0,
+            friction: 100.0,
             velocity: Vec3::ZERO,
             key_forward: KeyCode::W,
             key_back: KeyCode::S,
@@ -48,10 +49,17 @@ impl Default for ThirdPersonController {
 pub fn controller_system(
     time: Res<Time>,
     key_input: Res<Input<KeyCode>>,
-    mut controller_query: Query<(&mut ThirdPersonController, &mut Transform)>,
+    // physics_context: Res<RapierContext>,
+    mut controller_query: Query<(
+        Entity,
+        &mut ThirdPersonController,
+        &mut Transform,
+        &mut Velocity,
+        &Collider,
+    )>,
     camera_query: Query<(&ThirdPersonCamera, &Transform), Without<ThirdPersonController>>,
 ) {
-    for (mut controller, mut controller_transform) in &mut controller_query {
+    for (entity, mut controller, mut transform, mut velocity, collider) in &mut controller_query {
         let camera_transform = camera_query.iter().find_map(|(camera, camera_transform)| {
             (camera.target_id == controller.id).then_some(camera_transform)
         });
@@ -67,12 +75,15 @@ pub fn controller_system(
                         + camera_transform.rotation.to_scaled_axis().y
                         - FRAC_PI_2,
                 );
-                controller_transform.rotation = controller_transform.rotation.lerp(
-                    target_rotation,
-                    controller.rotation_speed * time.delta_seconds(),
-                );
+                // transform.rotation = transform.rotation.lerp(
+                //     target_rotation,
+                //     (controller.rotation_speed * time.delta_seconds())
+                //         .max(0.0)
+                //         .min(1.0),
+                // );
+                transform.rotation = target_rotation;
 
-                controller_transform.forward()
+                transform.forward()
             } else {
                 Vec3::ZERO
             };
@@ -82,16 +93,33 @@ pub fn controller_system(
                 .then_some(controller.sprint_speed)
                 .unwrap_or(controller.movement_speed);
 
-            controller.velocity = move_ground(
+            let new_velocity = move_ground(
                 acc,
-                controller.velocity,
+                controller.velocity, // velocity.linvel,
                 controller.friction,
                 movement_speed,
                 controller.max_speed,
                 time.delta_seconds(),
             );
 
-            controller_transform.translation += controller.velocity;
+            // let cast = physics_context.cast_shape(
+            //     transform.translation,
+            //     transform.rotation,
+            //     new_velocity,
+            //     collider,
+            //     new_velocity.length_squared(),
+            //     QueryFilter::default()
+            //         .exclude_rigid_body(entity)
+            //         .exclude_sensors(),
+            // );
+            // dbg!(cast);
+            // if let Some((_entity, toi)) = cast {
+            //     dbbg!()
+            // }
+
+            // velocity.linvel = new_velocity;
+            controller.velocity = new_velocity;
+            transform.translation += controller.velocity;
         }
     }
 }
